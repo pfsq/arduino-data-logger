@@ -11,6 +11,12 @@ Adafruit_GPS GPS(&Serial1);
 uint8_t degree;
 float dotdegree;
 
+/* For debugging purposes */
+#define OUTPUTMODE 1
+
+#define PRINT_ANALOGS 0
+#define PRINT_EULER 1
+
 // Accelerometer setup
 // Axis definition
 // Correct directions x,y,z = gyro, accelerometer, magnetometer
@@ -40,12 +46,6 @@ int SENSOR_SIGN[9] = {1,-1,-1,-1,1,1,1,-1,-1};
 #define Ki_ROLLPITCH 0.00002
 #define Kp_YAW 1.2
 #define Ki_YAW 0.00002
-
-/* For debugging purposes */
-#define OUTPUTMODE 1
-
-#define PRINT_ANALOGS 0
-#define PRINT_EULER 1
 
 float G_Dt=0.02;
 
@@ -93,7 +93,7 @@ float Temporary_Matrix[3][3]={
 
 // Set GPSECHO to 'false' to turn off echoing the GPS data to the Serial console
 // Set to 'true' if you want to debug and listen to the raw GPS sentences
-#define GPSECHO  true
+#define GPSECHO  false
 /* set to true to only log to SD when GPS has a fix, for debugging, keep it false */
 #define LOG_FIXONLY true  
 
@@ -132,15 +132,10 @@ void error(uint8_t errno) {
 }
 
 void setup() {
-  // connect at 115200 so we can read the GPS fast enough and echo without dropping chars
-  // also spit it out
-  // Serial.begin(115200);
-  // Serial.println("\r\nUltimate GPSlogger Shield");
-  pinMode(ledPin, OUTPUT);
-
   // make sure that the default chip select pin is set to
   // output, even if you don't use it:
-  pinMode(10, OUTPUT);
+  pinMode(chipSelect, OUTPUT);
+  pinMode(ledPin, OUTPUT);
   
   // I2C initialization
   I2C_Init();
@@ -148,10 +143,10 @@ void setup() {
   Accel_Init();
   Gyro_Init();
   
-  for(uint8_t i=0; i<32; i++){
+  for(uint8_t i=0; i<32; i++) {
     Read_Gyro();
     Read_Accel();
-    for(uint8_t y=0; y<6; y++){
+    for(uint8_t y=0; y<6; y++) {
       AN_OFFSET[y] += AN[y];
     }
     delay(20);
@@ -163,11 +158,8 @@ void setup() {
   
   // see if the card is present and can be initialized:
   if (!SD.begin(chipSelect, 11, 12, 13)) {
-//  if (!SD.begin(chipSelect)) {      // if you're using an UNO, you can use this line instead
-//     Serial.println("Card init. failed!");
     error(2);
   }
-  // error(5);
   char filename[15];
   strcpy(filename, "LOG00.csv");
   for (uint8_t i = 0; i < 100; i++) {
@@ -181,10 +173,8 @@ void setup() {
 
   logfile = SD.open(filename, FILE_WRITE);
   if( ! logfile ) {
-//     Serial.print("Couldnt create "); Serial.println(filename);
     error(3);
   }
-//   Serial.print("Writing to "); Serial.println(filename);
   logfile.println("DATE;TIME;LATITUDE;LONGITUDE;ALTITUDE;SPEED (KPH);HEADING;FIX;LON G;LAT G;VER G;GYRO X;GYRO Y;GYRO Z"); logfile.flush();
 
   // connect to the GPS at the desired rate
@@ -201,30 +191,25 @@ void setup() {
 
   // Turn off updates on antenna status, if the firmware permits it
   GPS.sendCommand(PGCMD_NOANTENNA);
-  
-  // Serial.println("Ready!");
 }
 
 void loop() {
    char c = GPS.read();
    if (GPSECHO)
-      if (c)   Serial.print(c);
+     if (c)   Serial.print(c);
 
   // if a sentence is received, we can check the checksum, parse it...
   if (GPS.newNMEAreceived()) {
     // a tricky thing here is if we print the NMEA sentence, or data
     // we end up not listening and catching other sentences! 
     // so be very wary if using OUTPUT_ALLDATA and trying to print out data
-    //Serial.println(GPS.lastNMEA());   // this also sets the newNMEAreceived() flag to false
         
     if (!GPS.parse(GPS.lastNMEA()))   // this also sets the newNMEAreceived() flag to false
       return;  // we can fail to parse a sentence in which case we should just wait for another
     
     // Sentence parsed! 
-    Serial.println("OK");
     if (LOG_FIXONLY && !GPS.fix) {
-//         Serial.print("No Fix");
-        return;
+      return;
     }
     
     Read_Gyro();
@@ -236,7 +221,6 @@ void loop() {
     Euler_angles();
 
     // Rad. lets log it!
-//     Serial.println("Log");
     
     logfile.print("20");
     logfile.print(GPS.year, DEC); logfile.print('-');
