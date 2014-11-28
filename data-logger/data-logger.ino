@@ -35,12 +35,12 @@ int SENSOR_SIGN[9] = {1,-1,-1,-1,1,1,1,-1,-1};
 #define Gyro_Scaled_Y(x) ((x)*ToRad(Gyro_Gain_Y))
 #define Gyro_Scaled_Z(x) ((x)*ToRad(Gyro_Gain_Z))
 // LSM303 magnetometer calibration constants
-#define M_X_MIN -545
-#define M_Y_MIN -714
-#define M_Z_MIN -401
-#define M_X_MAX 571
-#define M_Y_MAX 321
-#define M_Z_MAX 490
+#define M_X_MIN -541
+#define M_Y_MIN -719
+#define M_Z_MIN -420
+#define M_X_MAX 557
+#define M_Y_MAX 341
+#define M_Z_MAX 494
 
 #define Kp_ROLLPITCH 0.02
 #define Ki_ROLLPITCH 0.00002
@@ -191,27 +191,25 @@ void setup() {
 
   // Turn off updates on antenna status, if the firmware permits it
   GPS.sendCommand(PGCMD_NOANTENNA);
+    
+  timer = millis();
+  delay(20);
+  counter = 0;
 }
 
 void loop() {
-   char c = GPS.read();
-   if (GPSECHO)
-     if (c)   Serial.print(c);
-
-  // if a sentence is received, we can check the checksum, parse it...
-  if (GPS.newNMEAreceived()) {
-    // a tricky thing here is if we print the NMEA sentence, or data
-    // we end up not listening and catching other sentences! 
-    // so be very wary if using OUTPUT_ALLDATA and trying to print out data
-        
-    if (!GPS.parse(GPS.lastNMEA()))   // this also sets the newNMEAreceived() flag to false
-      return;  // we can fail to parse a sentence in which case we should just wait for another
+  
+  if ((millis()-timer) >= 20) { // Main loop runs at 50Hz
+  
+    counter++;
+    timer_old = timer;
+    timer = millis();
+    if (timer > timer_old)
+      G_Dt = (timer - timer_old)/1000.0; // Real time of loop run. We use this on the DCM
+    else
+      G_Dt = 0;
     
-    // Sentence parsed! 
-    if (LOG_FIXONLY && !GPS.fix) {
-      return;
-    }
-    
+    // Data acquisition
     Read_Gyro();
     Read_Accel();
     // Calculations
@@ -222,32 +220,60 @@ void loop() {
 
     // Rad. lets log it!
     
-    logfile.print("20");
-    logfile.print(GPS.year, DEC); logfile.print('-');
-    logfile.print(GPS.month, DEC); logfile.print('-');
-    logfile.print(GPS.day, DEC); logfile.print(';');
-    logfile.print(GPS.hour, DEC); logfile.print(':');
-    logfile.print(GPS.minute, DEC); logfile.print(':');
-    logfile.print(GPS.seconds, DEC); logfile.print('.');
-    logfile.print(GPS.milliseconds, DEC); logfile.print(';');
-    // LATITUDE
-    if (GPS.lat == 'S')
-        logfile.print('-');
-    degree = (int)GPS.latitude / 100;
-    dotdegree = degree + (GPS.latitude - degree*100)/60.0;
-    logfile.print(dotdegree,6); logfile.print(';');
-    // LONGITUDE
-    if (GPS.lon == 'W')
-        logfile.print('-');
-    degree = (int)GPS.longitude / 100;
-    dotdegree = degree + (GPS.longitude - degree*100)/60.0;
-    logfile.print(dotdegree,6); logfile.print(';');
-    // ALTITUDE
-    logfile.print(GPS.altitude); logfile.print(';');
-    // SPEED
-    logfile.print((float)GPS.speed * 1.852); logfile.print(';');
-    // HEADING
-    logfile.print(GPS.angle); logfile.print(';');
+    char c = GPS.read();
+    if (GPSECHO)
+      if (c)   Serial.print(c);
+    // if a sentence is received, we can check the checksum, parse it...
+    if (GPS.newNMEAreceived()) {
+      // a tricky thing here is if we print the NMEA sentence, or data
+      // we end up not listening and catching other sentences! 
+      // so be very wary if using OUTPUT_ALLDATA and trying to print out data
+          
+      if (!GPS.parse(GPS.lastNMEA()))   // this also sets the newNMEAreceived() flag to false
+        return;  // we can fail to parse a sentence in which case we should just wait for another
+      
+      // Sentence parsed! 
+      
+      logfile.print("20");
+      logfile.print(GPS.year, DEC); logfile.print('-');
+      logfile.print(GPS.month, DEC); logfile.print('-');
+      logfile.print(GPS.day, DEC); logfile.print(';');
+      logfile.print(GPS.hour, DEC); logfile.print(':');
+      logfile.print(GPS.minute, DEC); logfile.print(':');
+      logfile.print(GPS.seconds, DEC); logfile.print('.');
+      logfile.print(GPS.milliseconds, DEC); logfile.print(';');
+      if (LOG_FIXONLY && !GPS.fix) {
+        goto bailout;
+      }
+      // LATITUDE
+      if (GPS.lat == 'S')
+          logfile.print('-');
+      degree = (int)GPS.latitude / 100;
+      dotdegree = degree + (GPS.latitude - degree*100)/60.0;
+      logfile.print(dotdegree,6); logfile.print(';');
+      // LONGITUDE
+      if (GPS.lon == 'W')
+          logfile.print('-');
+      degree = (int)GPS.longitude / 100;
+      dotdegree = degree + (GPS.longitude - degree*100)/60.0;
+      logfile.print(dotdegree,6); logfile.print(';');
+      // ALTITUDE
+      logfile.print(GPS.altitude); logfile.print(';');
+      // SPEED
+      logfile.print((float)GPS.speed * 1.852); logfile.print(';');
+      // HEADING
+      logfile.print(GPS.angle); logfile.print(';');
+      goto cont;
+    }
+    logfile.print(';');
+    logfile.print(';');
+    bailout:
+    logfile.print(';');
+    logfile.print(';');
+    logfile.print(';');
+    logfile.print(';');
+    logfile.print(';');
+    cont:
     // FIX
     logfile.print(GPS.fix); logfile.print(';');
     // LON G
